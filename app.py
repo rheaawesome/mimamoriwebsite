@@ -1,29 +1,59 @@
-
 import streamlit as st
 import pandas as pd
-import numpy as np
 import time
 
+# --------------------------------------------------
+# Page setup
+# --------------------------------------------------
+
 st.set_page_config(
-    page_title="Mimamori Heat Risk Monitor",
+    page_title="Mimamori Heat Guard",
     page_icon="⌚",
     layout="wide"
 )
 
 st.title("MIMAMORI")
-st.caption("Wearable heat-risk monitoring system for people with dementia")
+st.subheader("A Wearable Heat Guard for People with Dementia")
 
-# -----------------------------
-# Sidebar: simulated sensor data
-# -----------------------------
+st.caption(
+    "Prototype software simulation of a screenless wearable wristband "
+    "that monitors heat-related risk factors and alerts the wearer and caregiver."
+)
 
-st.sidebar.header("Simulation Controls")
+st.info(
+    "This is a hackathon prototype. The heat-risk logic shown here is a "
+    "rule-based simulation and has not been clinically validated."
+)
 
-temperature = st.sidebar.slider(
-    "Outdoor Temperature (°C)",
+# --------------------------------------------------
+# SESSION STATE
+# --------------------------------------------------
+
+if "wearer_responded" not in st.session_state:
+    st.session_state.wearer_responded = False
+
+if "caregiver_notified" not in st.session_state:
+    st.session_state.caregiver_notified = False
+
+if "simulate_timeout" not in st.session_state:
+    st.session_state.simulate_timeout = False
+
+
+# --------------------------------------------------
+# SIDEBAR — SENSOR INPUTS
+# --------------------------------------------------
+
+st.sidebar.header("Sensor Simulation")
+
+st.sidebar.caption(
+    "These controls simulate readings collected by the Mimamori wristband."
+)
+
+air_temp = st.sidebar.slider(
+    "Surrounding Air Temperature (°C)",
     min_value=20.0,
     max_value=45.0,
-    value=30.0,
+    value=29.0,
     step=0.5
 )
 
@@ -38,7 +68,7 @@ humidity = st.sidebar.slider(
 heart_rate = st.sidebar.slider(
     "Heart Rate (bpm)",
     min_value=50,
-    max_value=160,
+    max_value=150,
     value=78,
     step=1
 )
@@ -46,376 +76,667 @@ heart_rate = st.sidebar.slider(
 skin_temp = st.sidebar.slider(
     "Skin Temperature (°C)",
     min_value=30.0,
-    max_value=40.0,
+    max_value=39.0,
     value=33.5,
     step=0.1
 )
 
-gsr = st.sidebar.slider(
-    "Skin Conductance / GSR",
-    min_value=0.0,
-    max_value=10.0,
-    value=3.0,
-    step=0.1
-)
-
-movement_level = st.sidebar.selectbox(
-    "Movement Level",
+activity_level = st.sidebar.selectbox(
+    "Activity Level",
     ["Normal", "Low", "Very Low"]
 )
 
 st.sidebar.divider()
 
-auto_simulate = st.sidebar.checkbox(
-    "Run automatic heat simulation",
+auto_demo = st.sidebar.checkbox(
+    "Run automatic heat-stress demo",
     value=False
 )
 
-# -----------------------------
-# Heat risk calculation
-# -----------------------------
 
-def calculate_risk(temp, humidity, hr, skin_temp, gsr, movement):
-    risk = 0
+# --------------------------------------------------
+# PROTOTYPE RISK LOGIC
+# --------------------------------------------------
 
-    # Environmental temperature
-    if temp <= 28:
-        risk += 5
-    elif temp <= 32:
-        risk += 12
-    elif temp <= 35:
-        risk += 20
-    elif temp <= 38:
-        risk += 28
-    else:
-        risk += 35
-
-    # Humidity
-    if humidity > 80:
-        risk += 15
-    elif humidity > 65:
-        risk += 10
-    elif humidity > 50:
-        risk += 5
-
-    # Heart rate
-    if hr > 120:
-        risk += 20
-    elif hr > 100:
-        risk += 14
-    elif hr > 90:
-        risk += 8
-
-    # Skin temperature
-    if skin_temp > 36.0:
-        risk += 18
-    elif skin_temp > 35.0:
-        risk += 12
-    elif skin_temp > 34.0:
-        risk += 6
-
-    # GSR
-    if gsr > 8:
-        risk += 12
-    elif gsr > 6:
-        risk += 8
-    elif gsr > 4:
-        risk += 4
-
-    # Movement
-    if movement == "Very Low":
-        risk += 12
-    elif movement == "Low":
-        risk += 6
-
-    return min(int(risk), 100)
-
-
-risk_score = calculate_risk(
-    temperature,
+def calculate_prototype_risk(
+    air_temp,
     humidity,
     heart_rate,
     skin_temp,
-    gsr,
-    movement_level
+    activity_level
+):
+    """
+    Prototype rule-based indicator for demonstration only.
+    This is NOT a clinically validated medical model.
+    """
+
+    score = 0
+
+    # Surrounding air temperature
+    if air_temp < 28:
+        score += 5
+    elif air_temp < 32:
+        score += 12
+    elif air_temp < 35:
+        score += 20
+    elif air_temp < 38:
+        score += 30
+    else:
+        score += 40
+
+    # Humidity
+    if humidity < 50:
+        score += 2
+    elif humidity < 65:
+        score += 6
+    elif humidity < 80:
+        score += 12
+    else:
+        score += 18
+
+    # Heart rate
+    if heart_rate < 90:
+        score += 3
+    elif heart_rate < 105:
+        score += 8
+    elif heart_rate < 120:
+        score += 15
+    else:
+        score += 22
+
+    # Skin temperature
+    if skin_temp < 34.0:
+        score += 3
+    elif skin_temp < 35.0:
+        score += 8
+    elif skin_temp < 36.0:
+        score += 15
+    else:
+        score += 22
+
+    # Activity level
+    if activity_level == "Normal":
+        score += 2
+    elif activity_level == "Low":
+        score += 8
+    else:
+        score += 14
+
+    return min(score, 100)
+
+
+risk_score = calculate_prototype_risk(
+    air_temp,
+    humidity,
+    heart_rate,
+    skin_temp,
+    activity_level
 )
 
-# -----------------------------
-# Risk level
-# -----------------------------
+
+# --------------------------------------------------
+# RISK LEVEL
+# --------------------------------------------------
 
 def get_risk_level(score):
     if score < 35:
-        return "SAFE"
+        return "LOW"
     elif score < 65:
-        return "WARNING"
+        return "MODERATE"
     else:
-        return "HIGH RISK"
+        return "HIGH"
 
 
 risk_level = get_risk_level(risk_score)
 
-# -----------------------------
-# Main dashboard
-# -----------------------------
 
-col1, col2, col3 = st.columns(3)
+# --------------------------------------------------
+# ALERT SELECTION
+# --------------------------------------------------
 
-with col1:
+def get_alert_plan(level):
+    if level == "LOW":
+        return {
+            "vibration": "OFF",
+            "voice": "None",
+            "caregiver": "No notification"
+        }
+
+    elif level == "MODERATE":
+        return {
+            "vibration": "Gentle vibration",
+            "voice": "Please move somewhere cooler and drink water.",
+            "caregiver": "Monitor only"
+        }
+
+    else:
+        return {
+            "vibration": "Strong repeated vibration",
+            "voice": "Heat risk detected. Please move to a cool place now.",
+            "caregiver": "Notify if high risk or no wearer response"
+        }
+
+
+alert_plan = get_alert_plan(risk_level)
+
+
+# --------------------------------------------------
+# SYSTEM ARCHITECTURE
+# --------------------------------------------------
+
+st.header("System Architecture")
+
+st.markdown(
+    """
+**Sensors collect data**  
+→ **ESP32 processes readings**  
+→ **Prototype risk algorithm estimates heat-risk level**  
+→ **LOW / MODERATE / HIGH identified**  
+→ **Best alert is selected**  
+→ **Wearer receives vibration + voice alert**  
+→ **Wearer presses response button**  
+→ **Caregiver is notified if risk is high or no response is received**
+"""
+)
+
+# --------------------------------------------------
+# CURRENT SENSOR DATA
+# --------------------------------------------------
+
+st.header("Live Sensor Data")
+
+c1, c2, c3, c4, c5 = st.columns(5)
+
+c1.metric(
+    "Air Temperature",
+    f"{air_temp:.1f} °C"
+)
+
+c2.metric(
+    "Humidity",
+    f"{humidity}%"
+)
+
+c3.metric(
+    "Heart Rate",
+    f"{heart_rate} bpm"
+)
+
+c4.metric(
+    "Skin Temperature",
+    f"{skin_temp:.1f} °C"
+)
+
+c5.metric(
+    "Activity",
+    activity_level
+)
+
+
+# --------------------------------------------------
+# ESP32 PROCESSING
+# --------------------------------------------------
+
+st.header("ESP32 Processing")
+
+st.write(
+    "The ESP32 would receive sensor readings and pass them to the "
+    "prototype rule-based heat-risk algorithm."
+)
+
+st.code(
+    f"""
+Air temperature: {air_temp:.1f} °C
+Humidity: {humidity} %
+Heart rate: {heart_rate} bpm
+Skin temperature: {skin_temp:.1f} °C
+Activity level: {activity_level}
+
+Prototype risk indicator: {risk_score} / 100
+Risk level: {risk_level}
+"""
+)
+
+
+# --------------------------------------------------
+# RISK DISPLAY
+# --------------------------------------------------
+
+st.header("Prototype Heat-Risk Indicator")
+
+r1, r2, r3 = st.columns(3)
+
+with r1:
     st.metric(
-        "Heat Risk Score",
+        "Prototype Risk Indicator",
         f"{risk_score} / 100"
     )
 
-with col2:
+with r2:
     st.metric(
         "Risk Level",
         risk_level
     )
 
-with col3:
-    alert_status = "Triggered" if risk_score >= 65 else "Not Triggered"
+with r3:
+    if risk_level == "HIGH":
+        status = "Escalation Active"
+    elif risk_level == "MODERATE":
+        status = "Wearer Alert"
+    else:
+        status = "Monitoring"
+
     st.metric(
-        "Caregiver Alert",
-        alert_status
+        "System Status",
+        status
     )
 
 st.progress(risk_score / 100)
 
-# -----------------------------
-# Alert message
-# -----------------------------
 
-if risk_level == "SAFE":
+# --------------------------------------------------
+# RISK MESSAGE
+# --------------------------------------------------
+
+if risk_level == "LOW":
     st.success(
-        "Current conditions appear stable. Continue monitoring."
+        "LOW RISK — Conditions currently appear stable. "
+        "Mimamori continues monitoring."
     )
 
-elif risk_level == "WARNING":
+elif risk_level == "MODERATE":
     st.warning(
-        "Heat risk is increasing. Consider moving the wearer to a cooler environment."
+        "MODERATE RISK — Mimamori alerts the wearer and recommends "
+        "moving to a cooler location."
     )
 
 else:
     st.error(
-        "HIGH HEAT RISK DETECTED. Mimamori would trigger vibration, visual alerts, "
-        "and notify the caregiver."
+        "HIGH RISK — Mimamori activates a strong wearer alert and "
+        "begins caregiver escalation logic."
     )
 
-# -----------------------------
-# Sensor display
-# -----------------------------
 
-st.subheader("Live Sensor Data")
+# --------------------------------------------------
+# WATCH RESPONSE
+# --------------------------------------------------
 
-c1, c2, c3, c4, c5 = st.columns(5)
+st.header("Screenless Wristband Response")
 
-c1.metric("Outdoor Temp", f"{temperature:.1f} °C")
-c2.metric("Humidity", f"{humidity}%")
-c3.metric("Heart Rate", f"{heart_rate} bpm")
-c4.metric("Skin Temp", f"{skin_temp:.1f} °C")
-c5.metric("GSR", f"{gsr:.1f}")
-
-st.write(f"**Movement Level:** {movement_level}")
-
-# -----------------------------
-# Watch response
-# -----------------------------
-
-st.subheader("Mimamori Watch Response")
-
-if risk_score < 35:
-    st.write("Watch status: Normal")
-    st.write("Vibration: OFF")
-    st.write("LED Alert: OFF")
-    st.write("Caregiver notification: OFF")
-
-elif risk_score < 65:
-    st.write("Watch status: Warning")
-    st.write("Vibration: LIGHT")
-    st.write("LED Alert: YELLOW")
-    st.write("Caregiver notification: Monitoring")
-
-else:
-    st.write("Watch status: Emergency Alert")
-    st.write("Vibration: STRONG")
-    st.write("LED Alert: RED")
-    st.write("Caregiver notification: SENT")
-
-# -----------------------------
-# Risk history chart
-# -----------------------------
-
-st.subheader("Example Risk Progression")
-
-history = pd.DataFrame({
-    "Time": [
-        "12:00",
-        "12:05",
-        "12:10",
-        "12:15",
-        "12:20",
-        "12:25"
-    ],
-    "Risk Score": [
-        max(risk_score - 45, 5),
-        max(risk_score - 35, 10),
-        max(risk_score - 25, 15),
-        max(risk_score - 15, 20),
-        max(risk_score - 7, 25),
-        risk_score
-    ]
-})
-
-st.line_chart(
-    history,
-    x="Time",
-    y="Risk Score"
+st.write(
+    "The physical Mimamori wristband has no screen. "
+    "It communicates through vibration and voice messages."
 )
 
-# -----------------------------
-# Caregiver panel
-# -----------------------------
+a1, a2, a3 = st.columns(3)
 
-st.subheader("Caregiver Dashboard")
-
-if risk_score >= 65:
-
-    st.error("Emergency notification")
-
-    st.write(
-        """
-        **Wearer:** Akira Tanaka  
-        **Status:** High heat risk detected  
-        **Current risk score:** {}
-        
-        Recommended actions:
-        - Contact the wearer
-        - Encourage hydration
-        - Move to a cooler location
-        - Check physical condition
-        """.format(risk_score)
+with a1:
+    st.metric(
+        "Vibration",
+        alert_plan["vibration"]
     )
 
-    col_a, col_b = st.columns(2)
+with a2:
+    st.metric(
+        "Voice Message",
+        "ACTIVE" if alert_plan["voice"] != "None" else "OFF"
+    )
 
-    with col_a:
-        if st.button("Call Wearer"):
-            st.info("Demo: caregiver call initiated.")
+with a3:
+    st.metric(
+        "Caregiver Status",
+        alert_plan["caregiver"]
+    )
 
-    with col_b:
-        if st.button("Acknowledge Alert"):
-            st.success("Alert acknowledged.")
+
+if alert_plan["voice"] != "None":
+    st.markdown("### Simulated Voice Message")
+    st.info(
+        f'🔊 "{alert_plan["voice"]}"'
+    )
+
+
+# --------------------------------------------------
+# WEARER RESPONSE
+# --------------------------------------------------
+
+st.header("Wearer Response")
+
+if risk_level == "LOW":
+
+    st.info(
+        "No response is required because the current risk level is LOW."
+    )
+
+    st.session_state.wearer_responded = False
+    st.session_state.caregiver_notified = False
+    st.session_state.simulate_timeout = False
+
 
 else:
-    st.info(
-        "No emergency notification currently active."
+
+    st.write(
+        "After receiving the alert, the wearer can press the physical "
+        "response button on the wristband."
     )
 
-# -----------------------------
-# Automatic demo simulation
-# -----------------------------
+    if st.button("Simulate Wearer Pressing Response Button"):
 
-if auto_simulate:
+        st.session_state.wearer_responded = True
+        st.session_state.caregiver_notified = False
+        st.session_state.simulate_timeout = False
 
-    st.subheader("Automatic Heat Exposure Simulation")
+
+    if st.session_state.wearer_responded:
+
+        st.success(
+            "Response received. The wearer has acknowledged the alert."
+        )
+
+
+# --------------------------------------------------
+# ESCALATION LOGIC
+# --------------------------------------------------
+
+st.header("Caregiver Escalation")
+
+if risk_level == "LOW":
+
+    st.info(
+        "Caregiver notification not required."
+    )
+
+
+elif risk_level == "MODERATE":
+
+    if st.session_state.wearer_responded:
+
+        st.success(
+            "Wearer acknowledged the alert. "
+            "Caregiver escalation is not required at this stage."
+        )
+
+    else:
+
+        st.warning(
+            "Waiting for wearer response."
+        )
+
+        if st.button("Simulate Prolonged No Response"):
+
+            st.session_state.simulate_timeout = True
+            st.session_state.caregiver_notified = True
+
+
+elif risk_level == "HIGH":
+
+    st.warning(
+        "High risk detected. Caregiver escalation is enabled."
+    )
+
+    if st.session_state.wearer_responded:
+
+        st.session_state.caregiver_notified = True
+
+        st.error(
+            "HIGH RISK remains present. "
+            "Caregiver notification is sent even though the wearer responded."
+        )
+
+    else:
+
+        st.write(
+            "The system waits for a wearer response."
+        )
+
+        if st.button("Simulate Prolonged No Response"):
+
+            st.session_state.simulate_timeout = True
+            st.session_state.caregiver_notified = True
+
+
+# --------------------------------------------------
+# CAREGIVER NOTIFICATION
+# --------------------------------------------------
+
+if st.session_state.caregiver_notified:
+
+    st.error("CAREGIVER NOTIFICATION SENT")
+
+    st.markdown(
+        f"""
+### Mimamori Caregiver Alert
+
+**Wearer:** Demo User  
+**Risk level:** {risk_level}  
+**Prototype risk indicator:** {risk_score}/100
+
+**Current readings**
+
+- Air temperature: {air_temp:.1f} °C
+- Humidity: {humidity}%
+- Heart rate: {heart_rate} bpm
+- Skin temperature: {skin_temp:.1f} °C
+- Activity level: {activity_level}
+
+**Recommended caregiver action**
+
+- Contact the wearer
+- Check their physical condition
+- Encourage movement to a cooler environment
+- Provide hydration if appropriate
+- Seek medical assistance if symptoms suggest an emergency
+"""
+    )
+
+    if st.button("Caregiver Acknowledges Alert"):
+
+        st.success(
+            "Caregiver acknowledgement recorded."
+        )
+
+
+# --------------------------------------------------
+# AUTOMATIC DEMO
+# --------------------------------------------------
+
+st.header("Automatic Simulation")
+
+st.write(
+    "Use this for the hackathon video to demonstrate how Mimamori responds "
+    "as environmental and physiological conditions worsen."
+)
+
+if auto_demo:
 
     placeholder = st.empty()
 
-    simulation_data = []
+    simulation_rows = []
 
-    for i in range(12):
+    for i in range(10):
 
-        simulated_temp = 28 + i * 0.9
-        simulated_humidity = min(55 + i * 2, 90)
-        simulated_hr = 78 + i * 3
-        simulated_skin = 33.2 + i * 0.2
-        simulated_gsr = 3 + i * 0.35
+        demo_air_temp = 28 + (i * 1.1)
+        demo_humidity = min(55 + (i * 2), 90)
+        demo_hr = 78 + (i * 4)
+        demo_skin_temp = 33.2 + (i * 0.28)
 
-        simulated_risk = calculate_risk(
-            simulated_temp,
-            simulated_humidity,
-            simulated_hr,
-            simulated_skin,
-            simulated_gsr,
-            "Low" if i > 5 else "Normal"
+        if i < 4:
+            demo_activity = "Normal"
+        elif i < 7:
+            demo_activity = "Low"
+        else:
+            demo_activity = "Very Low"
+
+        demo_risk = calculate_prototype_risk(
+            demo_air_temp,
+            demo_humidity,
+            demo_hr,
+            demo_skin_temp,
+            demo_activity
         )
 
-        simulation_data.append({
-            "Temperature": simulated_temp,
-            "Humidity": simulated_humidity,
-            "Heart Rate": simulated_hr,
-            "Skin Temperature": simulated_skin,
-            "Risk": simulated_risk
-        })
+        demo_level = get_risk_level(demo_risk)
+
+        simulation_rows.append(
+            {
+                "Step": i + 1,
+                "Air Temperature": demo_air_temp,
+                "Humidity": demo_humidity,
+                "Heart Rate": demo_hr,
+                "Skin Temperature": demo_skin_temp,
+                "Activity": demo_activity,
+                "Risk": demo_risk,
+                "Level": demo_level
+            }
+        )
 
         with placeholder.container():
 
-            st.metric(
-                "Simulated Temperature",
-                f"{simulated_temp:.1f} °C"
+            st.subheader(
+                f"Simulation Step {i + 1}"
             )
 
-            st.metric(
-                "Simulated Heart Rate",
-                f"{simulated_hr} bpm"
+            d1, d2, d3 = st.columns(3)
+
+            d1.metric(
+                "Air Temperature",
+                f"{demo_air_temp:.1f} °C"
             )
 
-            st.metric(
-                "Simulated Risk Score",
-                f"{simulated_risk} / 100"
+            d2.metric(
+                "Heart Rate",
+                f"{demo_hr} bpm"
             )
 
-            st.progress(simulated_risk / 100)
+            d3.metric(
+                "Prototype Risk",
+                f"{demo_risk}/100"
+            )
 
-            if simulated_risk >= 65:
-                st.error(
-                    "MIMAMORI ALERT: High heat risk detected. "
-                    "Caregiver notification triggered."
-                )
-            elif simulated_risk >= 35:
-                st.warning(
-                    "Risk increasing."
-                )
-            else:
+            st.progress(demo_risk / 100)
+
+            if demo_level == "LOW":
+
                 st.success(
-                    "Condition stable."
+                    "LOW — Monitoring continues."
                 )
 
-        time.sleep(0.4)
+            elif demo_level == "MODERATE":
+
+                st.warning(
+                    "MODERATE — Gentle vibration and voice alert activated."
+                )
+
+            else:
+
+                st.error(
+                    "HIGH — Strong vibration activated. "
+                    "Wearer response requested. "
+                    "Caregiver escalation enabled."
+                )
+
+        time.sleep(0.6)
+
+    simulation_df = pd.DataFrame(simulation_rows)
+
+    st.subheader("Risk Progression")
 
     st.line_chart(
-        pd.DataFrame(simulation_data)["Risk"]
+        simulation_df,
+        x="Step",
+        y="Risk"
     )
 
-# -----------------------------
-# Explanation
-# -----------------------------
 
-with st.expander("How this prototype works"):
+# --------------------------------------------------
+# PHYSICAL PRODUCT SPECIFICATION
+# --------------------------------------------------
 
-    st.write(
+with st.expander("Physical Wristband Design"):
+
+    st.markdown(
         """
-        This prototype simulates data that could be collected by the
-        Mimamori wearable.
+### Mimamori Wristband
 
-        The system combines environmental and physiological signals,
-        including:
+**Type:**  
+Screenless wearable wristband
 
-        - outdoor temperature
-        - humidity
-        - heart rate
-        - skin temperature
-        - skin conductance
-        - movement
+**Band:**  
+Medical-grade silicone  
+- hypoallergenic
+- waterproof
+- sweat-resistant
+- flexible
 
-        These values are passed into a prototype heat-risk scoring
-        algorithm.
+**Housing:**  
+PC+ABS  
+- lightweight
+- impact-resistant
 
-        When the estimated risk passes a threshold, the simulated watch
-        activates alerts and sends a notification to the caregiver.
+**Housing dimensions:**  
+48 × 28 × 13 mm
 
-        This is a hackathon prototype and is not a clinically validated
-        medical device.
+**Strap width:**  
+22 mm
+
+**Target weight:**  
+<35 g
+
+### Sensor Placement
+
+**Inward-facing sensors**
+- Heart rate
+- Skin temperature
+
+**Outward-facing sensors**
+- Surrounding air temperature
+- Humidity
+
+**Internal sensor**
+- Accelerometer for activity level
+
+### Outputs
+
+- Vibration
+- Voice messages
+- Caregiver notifications
+
+### Charging
+
+Two gold-plated magnetic pogo-pin contacts are located on the underside.
+
+The charging dock uses:
+- spring-loaded pogo pins
+- neodymium alignment magnets
+- 5 V charging connection
+
+**Target enclosure rating:** IP67
+"""
+    )
+
+
+# --------------------------------------------------
+# SOFTWARE EXPLANATION
+# --------------------------------------------------
+
+with st.expander("How This Software Prototype Matches Mimamori"):
+
+    st.markdown(
         """
+This app simulates the software logic of the Mimamori wearable system.
+
+1. Sensor values are simulated.
+2. The ESP32 processing stage is represented.
+3. A prototype risk indicator is calculated.
+4. The system identifies LOW, MODERATE, or HIGH risk.
+5. The software selects an appropriate wearer alert.
+6. The wearer can acknowledge the alert using a simulated response button.
+7. A caregiver notification is generated when:
+   - HIGH risk is detected, or
+   - the wearer does not respond for a prolonged period.
+
+The actual wristband is designed to be screenless. The Streamlit interface is
+therefore a development and demonstration dashboard, not the interface the
+wearer would see.
+"""
     )
