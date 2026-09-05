@@ -1,60 +1,93 @@
 import streamlit as st
 
+
+# =========================================================
+# PAGE CONFIGURATION
+# =========================================================
+
 st.set_page_config(
-    page_title="Mimamori Care",
+    page_title="Mimamori",
     page_icon="⌚",
     layout="wide"
 )
 
+
 # =========================================================
-# HEAT INDEX
-# NOAA / NWS Rothfusz regression
+# SESSION STATE
+# =========================================================
+
+if "caregiver_message" not in st.session_state:
+    st.session_state.caregiver_message = (
+        "Everything looks okay. I am checking on you."
+    )
+
+if "patient_reply" not in st.session_state:
+    st.session_state.patient_reply = ""
+
+if "caregiver_alert_acknowledged" not in st.session_state:
+    st.session_state.caregiver_alert_acknowledged = False
+
+
+# =========================================================
+# HEAT INDEX CALCULATION
 # =========================================================
 
 def calculate_heat_index(temp_c, humidity):
     """
-    Approximate NOAA/NWS Heat Index.
+    Approximate NOAA/NWS Heat Index using the Rothfusz regression.
 
-    The Rothfusz regression is principally applicable to warm,
-    humid conditions. For cooler conditions we return air temperature.
+    The Heat Index estimates how hot conditions feel when relative
+    humidity is considered together with air temperature.
 
-    This is environmental heat-risk information, NOT a clinical
-    diagnosis or dementia-specific medical threshold.
+    This is environmental heat-risk information and is NOT a
+    dementia-specific medical diagnosis.
     """
 
-    temp_f = temp_c * 9 / 5 + 32
+    temp_f = (temp_c * 9 / 5) + 32
     rh = humidity
 
+    # Heat Index is primarily relevant in hot conditions.
+    # Below 80°F, use air temperature as a simple approximation.
     if temp_f < 80:
         return temp_c
 
-    hi = (
+    heat_index_f = (
         -42.379
-        + 2.04901523 * temp_f
-        + 10.14333127 * rh
-        - 0.22475541 * temp_f * rh
-        - 0.00683783 * temp_f ** 2
-        - 0.05481717 * rh ** 2
-        + 0.00122874 * temp_f ** 2 * rh
-        + 0.00085282 * temp_f * rh ** 2
-        - 0.00000199 * temp_f ** 2 * rh ** 2
+        + (2.04901523 * temp_f)
+        + (10.14333127 * rh)
+        - (0.22475541 * temp_f * rh)
+        - (0.00683783 * temp_f ** 2)
+        - (0.05481717 * rh ** 2)
+        + (0.00122874 * temp_f ** 2 * rh)
+        + (0.00085282 * temp_f * rh ** 2)
+        - (0.00000199 * temp_f ** 2 * rh ** 2)
     )
 
-    return (hi - 32) * 5 / 9
+    heat_index_c = (heat_index_f - 32) * 5 / 9
 
+    return heat_index_c
+
+
+# =========================================================
+# SIMPLIFIED PROTOTYPE RISK CLASSIFICATION
+# =========================================================
 
 def determine_risk(heat_index_c):
     """
-    Simplified prototype grouping derived from traditional
+    Simplified prototype classification based on traditional
     NWS Heat Index risk categories.
 
-    LOW: below ~32°C / 90°F
-    MODERATE: ~32–39°C / 90–103°F
-    HIGH: >= ~39°C / 103°F
+    LOW:
+        Heat Index below approximately 32°C / 90°F
 
-    The original NWS system contains more categories.
-    Mimamori simplifies them to LOW / MODERATE / HIGH
-    for this prototype.
+    MODERATE:
+        Approximately 32–39°C / 90–103°F
+
+    HIGH:
+        Approximately 39°C / 103°F or above
+
+    This prototype combines NWS categories into three simpler
+    levels for caregiver readability.
     """
 
     if heat_index_c < 32:
@@ -68,55 +101,51 @@ def determine_risk(heat_index_c):
 
 
 # =========================================================
-# SESSION STATE
-# =========================================================
-
-if "wearer_response" not in st.session_state:
-    st.session_state.wearer_response = False
-
-if "caregiver_alert" not in st.session_state:
-    st.session_state.caregiver_alert = False
-
-
-# =========================================================
-# SIDEBAR — DEVELOPER / DEMO CONTROLS
+# SIDEBAR — SIMULATION CONTROLS
 # =========================================================
 
 st.sidebar.title("Simulation Controls")
 
 st.sidebar.caption(
-    "For prototype demonstration only. "
-    "These controls simulate data coming from the Mimamori wristband."
+    "Hackathon prototype: adjust these values to simulate "
+    "sensor readings from the Mimamori wristband."
 )
+
+st.sidebar.markdown("### Environmental Sensors")
 
 air_temperature = st.sidebar.slider(
     "Surrounding Air Temperature (°C)",
-    20.0,
-    45.0,
-    29.0,
-    0.5
+    min_value=20.0,
+    max_value=45.0,
+    value=29.0,
+    step=0.5
 )
 
 humidity = st.sidebar.slider(
     "Humidity (%)",
-    20,
-    100,
-    55
+    min_value=20,
+    max_value=100,
+    value=55,
+    step=1
 )
+
+
+st.sidebar.markdown("### Wearer Sensors")
 
 heart_rate = st.sidebar.slider(
     "Heart Rate (bpm)",
-    50,
-    150,
-    78
+    min_value=50,
+    max_value=150,
+    value=78,
+    step=1
 )
 
 skin_temperature = st.sidebar.slider(
     "Skin Temperature (°C)",
-    30.0,
-    39.0,
-    33.5,
-    0.1
+    min_value=30.0,
+    max_value=39.0,
+    value=33.5,
+    step=0.1
 )
 
 activity = st.sidebar.selectbox(
@@ -128,9 +157,16 @@ activity = st.sidebar.selectbox(
     ]
 )
 
+st.sidebar.divider()
+
+st.sidebar.caption(
+    "The controls are for prototype demonstration and would "
+    "normally be replaced by live sensor readings from the ESP32."
+)
+
 
 # =========================================================
-# CALCULATIONS
+# CALCULATE CURRENT ENVIRONMENTAL RISK
 # =========================================================
 
 heat_index = calculate_heat_index(
@@ -142,330 +178,556 @@ risk = determine_risk(heat_index)
 
 
 # =========================================================
-# CAREGIVER DASHBOARD
+# HEADER
 # =========================================================
 
-st.title("Mimamori Care")
+st.title("MIMAMORI")
 
 st.caption(
-    "Live safety monitoring for the Mimamori screenless wristband"
-)
-
-# ---------------------------------------------------------
-# Current status
-# ---------------------------------------------------------
-
-if risk == "LOW":
-
-    st.success(
-        "● LOW HEAT RISK — Current environmental conditions "
-        "do not indicate elevated heat risk."
-    )
-
-elif risk == "MODERATE":
-
-    st.warning(
-        "● MODERATE HEAT RISK — Heat conditions are becoming "
-        "concerning. Mimamori is alerting the wearer."
-    )
-
-else:
-
-    st.error(
-        "● HIGH HEAT RISK — Potentially dangerous heat conditions "
-        "detected. Check the wearer."
-    )
-
-
-# =========================================================
-# 1. LIVE SENSOR DATA
-# =========================================================
-
-st.header("Live Sensor Data")
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-
-    st.metric(
-        "Heart Rate",
-        f"{heart_rate} bpm"
-    )
-
-    st.caption("Measured by inward-facing sensor")
-
-with col2:
-
-    st.metric(
-        "Skin Temperature",
-        f"{skin_temperature:.1f} °C"
-    )
-
-    st.caption("Measured at the wrist")
-
-with col3:
-
-    st.metric(
-        "Activity",
-        activity
-    )
-
-    st.caption("Measured by accelerometer")
-
-
-col4, col5, col6 = st.columns(3)
-
-with col4:
-
-    st.metric(
-        "Air Temperature",
-        f"{air_temperature:.1f} °C"
-    )
-
-with col5:
-
-    st.metric(
-        "Humidity",
-        f"{humidity}%"
-    )
-
-with col6:
-
-    st.metric(
-        "Estimated Heat Index",
-        f"{heat_index:.1f} °C"
-    )
-
-
-# =========================================================
-# 2. PROTOTYPE HEAT-RISK INDICATOR
-# =========================================================
-
-st.header("Heat-Risk Indicator")
-
-risk_col, explanation_col = st.columns([1, 2])
-
-with risk_col:
-
-    if risk == "LOW":
-
-        st.metric(
-            "Current Risk",
-            "LOW"
-        )
-
-    elif risk == "MODERATE":
-
-        st.metric(
-            "Current Risk",
-            "MODERATE"
-        )
-
-    else:
-
-        st.metric(
-            "Current Risk",
-            "HIGH"
-        )
-
-
-with explanation_col:
-
-    if risk == "LOW":
-
-        st.write(
-            "**What this means:** Mimamori continues monitoring. "
-            "No wearer intervention is currently required."
-        )
-
-    elif risk == "MODERATE":
-
-        st.write(
-            "**What this means:** Environmental heat exposure is increasing. "
-            "Mimamori prompts the wearer to move somewhere cooler."
-        )
-
-    else:
-
-        st.write(
-            "**What this means:** Environmental conditions may increase "
-            "the risk of heat illness. Mimamori alerts the wearer and "
-            "escalates monitoring to the caregiver."
-        )
-
-
-st.caption(
-    "Prototype classification based primarily on environmental Heat Index. "
-    "This is not a medical diagnosis."
+    "A Wearable Heat Guard for People with Dementia"
 )
 
 
 # =========================================================
-# 3. SCREENLESS WRISTBAND RESPONSE
+# TABS
 # =========================================================
 
-st.header("Wristband Response")
+caregiver_tab, wearer_tab = st.tabs(
+    [
+        "Caregiver View",
+        "Wearer View"
+    ]
+)
 
-if risk == "LOW":
 
-    col1, col2, col3 = st.columns(3)
+# =========================================================
+# CAREGIVER VIEW
+# =========================================================
 
-    col1.metric(
-        "Vibration",
-        "OFF"
+with caregiver_tab:
+
+    st.header("Current Status")
+
+    # -----------------------------------------------------
+    # Overall status
+    # -----------------------------------------------------
+
+    if risk == "LOW":
+
+        st.success(
+            "LOW HEAT RISK — Current environmental conditions "
+            "do not indicate elevated heat risk."
+        )
+
+    elif risk == "MODERATE":
+
+        st.warning(
+            "MODERATE HEAT RISK — Heat conditions are becoming "
+            "concerning. Mimamori is alerting the wearer."
+        )
+
+    else:
+
+        st.error(
+            "HIGH HEAT RISK — Potentially dangerous heat conditions "
+            "detected. Please check on the wearer."
+        )
+
+
+    # =====================================================
+    # LIVE SENSOR DATA
+    # =====================================================
+
+    st.header("Live Sensor Data")
+
+    st.caption(
+        "Current readings simulated from the Mimamori wristband."
     )
 
-    col2.metric(
-        "Voice Alert",
-        "OFF"
+    sensor1, sensor2, sensor3 = st.columns(3)
+
+    with sensor1:
+
+        st.metric(
+            "Heart Rate",
+            f"{heart_rate} bpm"
+        )
+
+    with sensor2:
+
+        st.metric(
+            "Skin Temperature",
+            f"{skin_temperature:.1f} °C"
+        )
+
+    with sensor3:
+
+        st.metric(
+            "Activity Level",
+            activity
+        )
+
+
+    sensor4, sensor5, sensor6 = st.columns(3)
+
+    with sensor4:
+
+        st.metric(
+            "Air Temperature",
+            f"{air_temperature:.1f} °C"
+        )
+
+    with sensor5:
+
+        st.metric(
+            "Humidity",
+            f"{humidity}%"
+        )
+
+    with sensor6:
+
+        st.metric(
+            "Estimated Heat Index",
+            f"{heat_index:.1f} °C"
+        )
+
+
+    # =====================================================
+    # HEAT-RISK INDICATOR
+    # =====================================================
+
+    st.header("Heat-Risk Indicator")
+
+    risk_col, explanation_col = st.columns(
+        [1, 2]
     )
 
-    col3.metric(
-        "Caregiver Alert",
-        "OFF"
+    with risk_col:
+
+        if risk == "LOW":
+
+            st.success("### LOW")
+
+        elif risk == "MODERATE":
+
+            st.warning("### MODERATE")
+
+        else:
+
+            st.error("### HIGH")
+
+
+    with explanation_col:
+
+        if risk == "LOW":
+
+            st.write(
+                "**What this means:** Current environmental heat "
+                "conditions are relatively low risk. Mimamori "
+                "continues monitoring."
+            )
+
+        elif risk == "MODERATE":
+
+            st.write(
+                "**What this means:** Heat exposure is increasing. "
+                "Mimamori alerts the wearer to move somewhere cooler."
+            )
+
+        else:
+
+            st.write(
+                "**What this means:** Environmental conditions may "
+                "increase the risk of heat illness. Mimamori alerts "
+                "the wearer and notifies the caregiver."
+            )
+
+
+    st.caption(
+        "The environmental classification is based on Heat Index. "
+        "This is not a medical diagnosis."
     )
 
-    st.info(
-        "Mimamori continues passive monitoring."
+
+    # =====================================================
+    # SCREENLESS WRISTBAND RESPONSE
+    # =====================================================
+
+    st.header("Screenless Wristband Response")
+
+    response1, response2, response3 = st.columns(3)
+
+
+    if risk == "LOW":
+
+        with response1:
+            st.metric(
+                "Vibration",
+                "OFF"
+            )
+
+        with response2:
+            st.metric(
+                "Voice Alert",
+                "OFF"
+            )
+
+        with response3:
+            st.metric(
+                "Caregiver Alert",
+                "OFF"
+            )
+
+        st.info(
+            "The wristband continues passive monitoring."
+        )
+
+
+    elif risk == "MODERATE":
+
+        with response1:
+            st.metric(
+                "Vibration",
+                "ACTIVE"
+            )
+
+        with response2:
+            st.metric(
+                "Voice Alert",
+                "ACTIVE"
+            )
+
+        with response3:
+            st.metric(
+                "Caregiver Alert",
+                "STANDBY"
+            )
+
+        st.warning(
+            'Wristband voice message: '
+            '"It is getting hot. Please move somewhere cooler."'
+        )
+
+
+    else:
+
+        with response1:
+            st.metric(
+                "Vibration",
+                "STRONG"
+            )
+
+        with response2:
+            st.metric(
+                "Voice Alert",
+                "ACTIVE"
+            )
+
+        with response3:
+            st.metric(
+                "Caregiver Alert",
+                "ACTIVE"
+            )
+
+        st.error(
+            'Wristband voice message: '
+            '"It is too hot. Please move to a cool place now."'
+        )
+
+
+    # =====================================================
+    # WEARER REPLY
+    # =====================================================
+
+    if st.session_state.patient_reply:
+
+        st.header("Latest Wearer Response")
+
+        if st.session_state.patient_reply == "I am OK":
+
+            st.success(
+                "Wearer replied: I'M OK"
+            )
+
+        elif st.session_state.patient_reply == "I need help":
+
+            st.error(
+                "Wearer replied: I NEED HELP"
+            )
+
+
+    # =====================================================
+    # CAREGIVER MESSAGE
+    # =====================================================
+
+    st.header("Message the Wearer")
+
+    st.caption(
+        "Send a short, simple message to the wearer's companion app."
     )
 
-
-elif risk == "MODERATE":
-
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric(
-        "Vibration",
-        "ACTIVE"
+    new_message = st.text_input(
+        "Message",
+        value=st.session_state.caregiver_message,
+        placeholder="Example: Please go inside and drink some water."
     )
-
-    col2.metric(
-        "Voice Alert",
-        "ACTIVE"
-    )
-
-    col3.metric(
-        "Caregiver Alert",
-        "Standby"
-    )
-
-    st.warning(
-        '🔊 Wristband voice message: '
-        '"It is getting hot. Please move somewhere cooler."'
-    )
-
 
     if st.button(
-        "Simulate wearer pressing response button",
+        "Send Message",
         type="primary"
     ):
 
-        st.session_state.wearer_response = True
-
-
-    if st.session_state.wearer_response:
+        st.session_state.caregiver_message = new_message
 
         st.success(
-            "Wearer response received. Mimamori continues monitoring."
+            "Message sent to wearer."
+        )
+
+
+    # =====================================================
+    # HIGH-RISK CAREGIVER ALERT
+    # =====================================================
+
+    if risk == "HIGH":
+
+        st.divider()
+
+        st.error("CAREGIVER ATTENTION REQUIRED")
+
+        st.markdown(
+            f"""
+### Mimamori Alert
+
+**Heat-risk level:** HIGH
+
+**Current environmental conditions**
+- Air temperature: **{air_temperature:.1f} °C**
+- Humidity: **{humidity}%**
+- Estimated Heat Index: **{heat_index:.1f} °C**
+
+**Wearer information**
+- Heart rate: **{heart_rate} bpm**
+- Skin temperature: **{skin_temperature:.1f} °C**
+- Activity: **{activity}**
+
+Please check on the wearer and determine whether assistance is needed.
+"""
+        )
+
+        if st.button(
+            "I have checked on the wearer"
+        ):
+
+            st.session_state.caregiver_alert_acknowledged = True
+
+        if st.session_state.caregiver_alert_acknowledged:
+
+            st.success(
+                "Caregiver acknowledgement recorded."
+            )
+
+
+# =========================================================
+# WEARER VIEW
+# =========================================================
+
+with wearer_tab:
+
+    # Larger, simpler layout
+    st.title("Mimamori")
+
+    st.markdown(
+        "## How are you?"
+    )
+
+
+    # =====================================================
+    # SIMPLE SAFETY MESSAGE
+    # =====================================================
+
+    if risk == "LOW":
+
+        st.success(
+            """
+### YOU ARE OK
+
+Everything looks okay.
+
+You can continue what you are doing.
+"""
+        )
+
+    elif risk == "MODERATE":
+
+        st.warning(
+            """
+### IT IS GETTING HOT
+
+Please move somewhere cooler.
+
+Rest and drink some water.
+"""
         )
 
     else:
 
-        st.write(
-            "Waiting for wearer acknowledgement."
+        st.error(
+            """
+### IT IS TOO HOT
+
+Please stop what you are doing.
+
+Move to a cool place now.
+"""
         )
 
-        if st.button(
-            "Simulate prolonged no response"
-        ):
 
-            st.session_state.caregiver_alert = True
-
-
-elif risk == "HIGH":
-
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric(
-        "Vibration",
-        "STRONG"
-    )
-
-    col2.metric(
-        "Voice Alert",
-        "ACTIVE"
-    )
-
-    col3.metric(
-        "Caregiver Alert",
-        "ACTIVE"
-    )
-
-    st.error(
-        '🔊 Wristband voice message: '
-        '"Heat risk detected. Please move to a cool place now."'
-    )
-
-    st.session_state.caregiver_alert = True
-
-
-# =========================================================
-# CAREGIVER ALERT
-# =========================================================
-
-if st.session_state.caregiver_alert:
-
-    st.divider()
-
-    st.error("CAREGIVER ATTENTION REQUIRED")
-
-    st.subheader("Mimamori Alert")
-
-    st.write(
-        f"""
-**Current heat-risk level:** {risk}
-
-**Air temperature:** {air_temperature:.1f} °C  
-**Humidity:** {humidity}%  
-**Estimated Heat Index:** {heat_index:.1f} °C  
-**Heart rate:** {heart_rate} bpm  
-**Skin temperature:** {skin_temperature:.1f} °C  
-**Activity:** {activity}
-"""
-    )
+    # =====================================================
+    # ACTIVITY
+    # =====================================================
 
     st.markdown(
-        """
-**Suggested next steps**
-
-Check on the wearer and determine whether they need assistance
-moving to a cooler environment. If the wearer shows symptoms of
-heat illness, follow appropriate emergency medical guidance.
-"""
+        "## Your Activity"
     )
 
-    if st.button(
-        "I have checked on the wearer"
-    ):
+    if activity == "Normal":
 
-        st.session_state.caregiver_alert = False
-        st.session_state.wearer_response = False
+        st.info(
+            """
+### Moving normally
+"""
+        )
 
-        st.success(
-            "Caregiver acknowledgement recorded."
+    elif activity == "Low":
+
+        st.warning(
+            """
+### Moving less than usual
+
+Please take care and rest if you need to.
+"""
+        )
+
+    else:
+
+        st.error(
+            """
+### Very little movement
+
+Please check that you are feeling okay.
+"""
         )
 
 
+    # =====================================================
+    # CAREGIVER MESSAGE
+    # =====================================================
+
+    st.markdown(
+        "## Message From Your Caregiver"
+    )
+
+    st.info(
+        f"""
+### {st.session_state.caregiver_message}
+"""
+    )
+
+
+    # =====================================================
+    # SIMPLE RESPONSE BUTTONS
+    # =====================================================
+
+    st.markdown(
+        "## Tell Your Caregiver"
+    )
+
+    button1, button2 = st.columns(2)
+
+
+    with button1:
+
+        if st.button(
+            "I'M OK",
+            use_container_width=True,
+            type="primary"
+        ):
+
+            st.session_state.patient_reply = "I am OK"
+
+            st.success(
+                "Your caregiver knows you are OK."
+            )
+
+
+    with button2:
+
+        if st.button(
+            "I NEED HELP",
+            use_container_width=True
+        ):
+
+            st.session_state.patient_reply = "I need help"
+
+            st.error(
+                "Your caregiver has been notified."
+            )
+
+
+    # No sensor numbers here intentionally
+    st.caption(
+        "Mimamori keeps detailed sensor information in the caregiver "
+        "view so this screen stays simple and easy to understand."
+    )
+
+
 # =========================================================
-# DISCLAIMER
+# PROTOTYPE INFORMATION
 # =========================================================
 
 st.divider()
 
+with st.expander("About this prototype"):
+
+    st.markdown(
+        """
+**Mimamori** is a prototype screenless wearable designed to monitor
+heat-related risk factors for people with dementia.
+
+### Sensors represented in this simulation
+
+**Inward-facing**
+- Heart rate
+- Skin temperature
+
+**Outward-facing**
+- Surrounding air temperature
+- Humidity
+
+**Internal**
+- Accelerometer for activity level
+
+### Wristband outputs
+
+- Vibration
+- Voice messages
+- Caregiver notifications
+
+### Current prototype risk calculation
+
+The environmental component uses the **Heat Index**, which combines
+air temperature and relative humidity.
+
+Heart rate, skin temperature, and activity are currently shown as
+supporting sensor information. They are **not currently used as
+clinically validated dementia-specific danger thresholds**.
+
+Future development would require clinical testing and validation before
+Mimamori could be used to make medical decisions.
+"""
+    )
+
+
 st.caption(
-    "Mimamori prototype. Environmental heat-risk classification is "
-    "based on the NOAA/NWS Heat Index concept. Heart rate, skin "
-    "temperature and activity readings are currently displayed as "
-    "supporting sensor information and are not used as clinically "
-    "validated diagnostic thresholds."
+    "Hackathon prototype — not a medical device or diagnostic system."
 )
